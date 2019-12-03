@@ -11,7 +11,6 @@ namespace MessagingServerBaseCode
 {
     public class ClientConnection : IDisposable
     {
-        private static readonly string EOM = "<EOM>";
 
         private Socket clientSocket;
         public string Name
@@ -41,13 +40,14 @@ namespace MessagingServerBaseCode
             {
                 int byteCount = clientSocket.Receive(buffer);
 
-                Name += Encoding.ASCII.GetString(buffer, 0, byteCount);
-
-                if(Name.EndsWith(EOM))
+                // check to see if this is the end of the transmission.
+                if (buffer[byteCount - 1] == Message.EOM)
                 {
-                    Name = Name.Replace(EOM, "");
                     recievedName = true;
+                    byteCount--;
                 }
+
+                Name += Encoding.UTF8.GetString(buffer, 0, byteCount);
             }
 
             ReadQueue = new List<Message>();
@@ -64,9 +64,14 @@ namespace MessagingServerBaseCode
 
         public void SendMessage(string message, string sender = "server")
         {
-            if (!message.Contains("|"))
-                message = string.Format("{0}|{1}", Name, message);
-            Message msg = new Message(Encoding.ASCII.GetBytes(message), sender);
+            byte[] bytes = Encoding.UTF8.GetBytes(message);
+
+            if (!bytes.Contains(Message.SOT))
+            {
+                message = string.Format("{0}{1}{2}", Name, (char)Message.SOT, message);
+                bytes = Encoding.UTF8.GetBytes(message);
+            }
+            Message msg = new Message(bytes, sender);
             SendMessage(msg);
         }
 
@@ -99,11 +104,11 @@ namespace MessagingServerBaseCode
             {
                 foreach (Message message in SendQueue)
                 {
-                    clientSocket.Send(message.Data);
-                    clientSocket.Send(Encoding.ASCII.GetBytes(EOM));
+                    clientSocket.Send(message.OutData);
+                    clientSocket.Send(new byte[] { Message.EOM });
                 }
 
-                byte[] goodbyte = Encoding.ASCII.GetBytes("Goodbye!" + EOM);
+                byte[] goodbyte = Encoding.UTF8.GetBytes("Goodbye!" + (char)Message.EOM);
 
                 clientSocket.Send(goodbyte);
 
@@ -114,38 +119,42 @@ namespace MessagingServerBaseCode
 
         private void ReadRun()
         {
-            while(!EndProcess)
+            while(!EndProcess && this.StillConnected)
             {
                 byte[] buffer = new byte[1024];
-                
-                while (this.StillConnected)
+                bool messageRecieved = false;
+                while (this.StillConnected && !messageRecieved)
                 {
                     string readStr = "";
                     try
                     {
                         int byteCount = clientSocket.Receive(buffer);
 
-                        readStr += Encoding.ASCII.GetString(buffer, 0, byteCount);
-                        if(readStr.EndsWith(EOM))
+                        if(buffer.Contains(Message.EOM))
                         {
-                            readStr = readStr.Replace(EOM, "");
-                            Message newMessage = new Message(Encoding.ASCII.GetBytes(readStr), Name);
-                            ReadQueue.Add(newMessage);
-                            break;
+                            messageRecieved = true;
+                            byteCount--;
                         }
+
+                        readStr += Encoding.UTF8.GetString(buffer, 0, byteCount);
+                        
                     }
                     catch (Exception e)
                     {
                         Console.WriteLine("{0} seems to have lost connection...", Name);
                         Console.WriteLine(e.Message);
                     }
+
+                    Message newMessage = new Message(Encoding.UTF8.GetBytes(readStr), Name);
+                    ReadQueue.Add(newMessage);
+                    
                 }
             }
         }
 
         private void SendRun()
         {
-            while(!EndProcess)
+            while(!EndProcess && this.StillConnected)
             {
                 if(SendQueue.Count > 0)
                 {
@@ -153,7 +162,7 @@ namespace MessagingServerBaseCode
                     {
                         Message message = SendQueue[0];
                         clientSocket.Send(message.OutData);
-                        clientSocket.Send(Encoding.ASCII.GetBytes(EOM));
+                        clientSocket.Send(new byte[] { Message.EOM });
 
                         SendQueue.RemoveAt(0);
                     }

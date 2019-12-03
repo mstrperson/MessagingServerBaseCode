@@ -1,8 +1,12 @@
-﻿using System;
+﻿
+#define FUNMODE
+
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+
 
 namespace MessagingServerBaseCode
 {
@@ -11,15 +15,29 @@ namespace MessagingServerBaseCode
         public string source;
         public string[] destinations;
 
-        private static readonly byte separator = Encoding.ASCII.GetBytes("|")[0];
+        public static readonly byte SOT = 0x0002; // UTF8 Start of Text.
+        public static readonly byte EOM = 0x0004; // UTF8 End of Transmission.
 
         public byte[] OutData
         {
             get
             {
-                List<byte> bytes = Encoding.ASCII.GetBytes(source).ToList();
-                bytes.Add(separator);
+                List<byte> bytes = Encoding.UTF8.GetBytes(source).ToList();
+                bytes.Add(SOT);
                 bytes.AddRange(Data);
+#if FUNMODE
+                // the server can alter bytes in the message....
+                if(bytes.Contains(0x006f))
+                {
+                    for(int i = 0; i < bytes.Count; i++)
+                    {
+                        if(bytes[i] == 0x006f)
+                        {
+                            bytes[i] = 0x00f6;
+                        }
+                    }
+                }
+#endif
                 return bytes.ToArray();
             }
         }
@@ -36,7 +54,7 @@ namespace MessagingServerBaseCode
             private set;
         }
 
-        public string Text => new string(Encoding.ASCII.GetChars(Data));
+        public string Text => new string(Encoding.UTF8.GetChars(Data));
         
         public Message(byte[] message, string from)
         {
@@ -48,7 +66,7 @@ namespace MessagingServerBaseCode
             bool readData = false;
             for (int i = 0; i < message.Length; i++)
             {
-                if (message[i] == separator)
+                if (message[i] == SOT)
                 {
                     readData = true;
                     continue;
@@ -64,7 +82,7 @@ namespace MessagingServerBaseCode
                 }
             }
 
-            destinations = (new string(Encoding.ASCII.GetChars(dest.ToArray()))).Split(',');
+            destinations = (new string(Encoding.UTF8.GetChars(dest.ToArray()))).Split(',');
 
             Data = data.ToArray();
         }

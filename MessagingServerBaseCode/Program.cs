@@ -25,7 +25,8 @@ namespace MessagingServerBaseCode
 
         static void Main(string[] args)
         {
-            
+            Console.InputEncoding = Encoding.UTF8;
+            Console.OutputEncoding = Encoding.UTF8;
 
             // Establish the local endpoint  
             // for the socket. Dns.GetHostName 
@@ -66,13 +67,20 @@ namespace MessagingServerBaseCode
                 if (input.Equals("quit"))
                     break;
             }
-
-            foreach(string client in clients.Keys)
+            try
             {
-                clients[client].SendMessage("Server is shutting down now.");
-                clients[client].Dispose();
+                Thread.BeginCriticalRegion();
+                foreach (string client in clients.Keys)
+                {
+                    clients[client].SendMessage("Server is shutting down now.");
+                    clients[client].Dispose();
+                }
+                Thread.EndCriticalRegion();
             }
-
+            catch
+            {
+                Console.WriteLine("May not have notified all clients that I'm shutting down...");
+            }
             MessageProcessingThread.Abort();
             // Stop Listening before aborting the Connection thread.
             listener.Close();
