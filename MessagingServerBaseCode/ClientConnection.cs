@@ -19,7 +19,9 @@ namespace MessagingServerBaseCode
             get;
             private set;
         }
-        
+
+        public bool StillConnected => clientSocket.Connected;
+
         private volatile List<Message> ReadQueue;
         private volatile List<Message> SendQueue;
 
@@ -48,25 +50,39 @@ namespace MessagingServerBaseCode
                 }
             }
 
+            ReadQueue = new List<Message>();
+            SendQueue = new List<Message>();
+
             ReadThread = new Thread(new ThreadStart(ReadRun));
             SendThread = new Thread(new ThreadStart(SendRun));
 
             ReadThread.Start();
             SendThread.Start();
+
+            SendMessage(string.Format("Hello, {0}", Name));
         }
 
         public void SendMessage(string message, string sender = "server")
         {
+            if (!message.Contains("|"))
+                message = string.Format("{0}|{1}", Name, message);
             Message msg = new Message(Encoding.ASCII.GetBytes(message), sender);
             SendMessage(msg);
         }
 
+        public bool HasMessages => ReadQueue.Count > 0;
+
         public Message GetNextMessage()
         {
-            Message message = ReadQueue[0];
-            ReadQueue.RemoveAt(0);
+            if (ReadQueue.Count > 0)
+            {
+                Message message = ReadQueue[0];
+                ReadQueue.RemoveAt(0);
 
-            return message;
+                return message;
+            }
+
+            return null;
         }
 
         public void SendMessage(Message message)
@@ -79,19 +95,21 @@ namespace MessagingServerBaseCode
             EndProcess = true;
             ReadThread.Abort();
             SendThread.Abort();
-
-            foreach(Message message in SendQueue)
+            if (this.StillConnected)
             {
-                clientSocket.Send(message.Data);
-                clientSocket.Send(Encoding.ASCII.GetBytes(EOM));
+                foreach (Message message in SendQueue)
+                {
+                    clientSocket.Send(message.Data);
+                    clientSocket.Send(Encoding.ASCII.GetBytes(EOM));
+                }
+
+                byte[] goodbyte = Encoding.ASCII.GetBytes("Goodbye!" + EOM);
+
+                clientSocket.Send(goodbyte);
+
+                clientSocket.Close();
+                clientSocket.Dispose();
             }
-
-            byte[] goodbyte = Encoding.ASCII.GetBytes("Goodbye!" + EOM);
-
-            clientSocket.Send(goodbyte);
-
-            clientSocket.Close();
-            clientSocket.Dispose();
         }
 
         private void ReadRun()
@@ -100,7 +118,7 @@ namespace MessagingServerBaseCode
             {
                 byte[] buffer = new byte[1024];
                 
-                while (true)
+                while (this.StillConnected)
                 {
                     string readStr = "";
                     try
@@ -113,6 +131,7 @@ namespace MessagingServerBaseCode
                             readStr = readStr.Replace(EOM, "");
                             Message newMessage = new Message(Encoding.ASCII.GetBytes(readStr), Name);
                             ReadQueue.Add(newMessage);
+                            break;
                         }
                     }
                     catch (Exception e)
@@ -133,7 +152,7 @@ namespace MessagingServerBaseCode
                     try
                     {
                         Message message = SendQueue[0];
-                        clientSocket.Send(message.Data);
+                        clientSocket.Send(message.OutData);
                         clientSocket.Send(Encoding.ASCII.GetBytes(EOM));
 
                         SendQueue.RemoveAt(0);

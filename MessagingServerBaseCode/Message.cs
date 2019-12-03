@@ -13,6 +13,17 @@ namespace MessagingServerBaseCode
 
         private static readonly byte separator = Encoding.ASCII.GetBytes("|")[0];
 
+        public byte[] OutData
+        {
+            get
+            {
+                List<byte> bytes = Encoding.ASCII.GetBytes(source).ToList();
+                bytes.Add(separator);
+                bytes.AddRange(Data);
+                return bytes.ToArray();
+            }
+        }
+
         public byte[] Data
         {
             get;

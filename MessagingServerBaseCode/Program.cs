@@ -32,7 +32,7 @@ namespace MessagingServerBaseCode
             // returns the name of the host  
             // running the application. 
             IPHostEntry ipHost = Dns.GetHostEntry(Dns.GetHostName());
-            IPAddress ipAddr = ipHost.AddressList[0];
+            IPAddress ipAddr = IPAddress.Loopback;//ipHost.AddressList[0];
             IPEndPoint localEndPoint = new IPEndPoint(ipAddr, 12345);
 
             // Creation TCP/IP Socket using  
@@ -53,6 +53,7 @@ namespace MessagingServerBaseCode
             MessageProcessingThread.Start();
 
             ServerMessageThread = new Thread(new ThreadStart(ProcessServerMessages));
+            ServerMessageThread.Start();
 
             Console.WriteLine("GAME ON!");
             while(true)
@@ -106,28 +107,42 @@ namespace MessagingServerBaseCode
         {
             while(true)
             {
-                foreach(string client in clients.Keys)
+                try
                 {
-                    Message nextMessage = clients[client].GetNextMessage();
-
-                    foreach(string recipient in nextMessage.destinations)
+                    foreach (string client in clients.Keys)
                     {
-                        if(recipient.Equals("server"))
+                        if(!clients[client].StillConnected)
                         {
-                            serverMessages.Add(nextMessage);
+                            Thread.BeginCriticalRegion();
+                            clients.Remove(client);
+                            clients[client].Dispose();
+                            Thread.EndCriticalRegion();
                             continue;
                         }
+                        if (!clients[client].HasMessages) continue;
 
-                        if(clients.ContainsKey(recipient))
+                        Message nextMessage = clients[client].GetNextMessage();
+
+                        foreach (string recipient in nextMessage.destinations)
                         {
-                            clients[recipient].SendMessage(nextMessage);
-                        }
-                        else
-                        {
-                            clients[client].SendMessage(string.Format("{0} doesn't seem to be connected.", recipient));
+                            if (recipient.Equals("server"))
+                            {
+                                serverMessages.Add(nextMessage);
+                                continue;
+                            }
+
+                            if (clients.ContainsKey(recipient))
+                            {
+                                clients[recipient].SendMessage(nextMessage);
+                            }
+                            else
+                            {
+                                clients[client].SendMessage(string.Format("{0} doesn't seem to be connected.", recipient));
+                            }
                         }
                     }
                 }
+                catch { }
             }
         }
 
@@ -142,7 +157,7 @@ namespace MessagingServerBaseCode
             {
                 if(serverMessages.Count > 0)
                 {
-                    Console.WriteLine("[{0}]\t{1}", serverMessages[0].TimeStamp, serverMessages[0].Text);
+                    Console.WriteLine("[{0}]\t{1}:  {2}", serverMessages[0].TimeStamp, serverMessages[0].source, serverMessages[0].Text);
 
                     ProcessCommand(serverMessages[0]);
 
