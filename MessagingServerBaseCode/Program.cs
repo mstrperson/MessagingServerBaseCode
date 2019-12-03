@@ -125,6 +125,13 @@ namespace MessagingServerBaseCode
                             clients.Remove(client);
                             clients[client].Dispose();
                             Thread.EndCriticalRegion();
+                            foreach(string c in clients.Keys)
+                            {
+                                if(!c.Equals(client))
+                                {
+                                    clients[c].SendMessage(string.Format("{0} has left the server.", client));
+                                }
+                            }
                             continue;
                         }
                         if (!clients[client].HasMessages) continue;
