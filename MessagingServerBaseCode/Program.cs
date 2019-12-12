@@ -33,7 +33,7 @@ namespace MessagingServerBaseCode
             // returns the name of the host  
             // running the application. 
             IPHostEntry ipHost = Dns.GetHostEntry(Dns.GetHostName());
-            IPAddress ipAddr = IPAddress.Loopback;//ipHost.AddressList[0];
+            IPAddress ipAddr = new IPAddress(new byte[] { 10, 0, 4, 86 });//IPAddress.Loopback;//ipHost.AddressList[0];
             IPEndPoint localEndPoint = new IPEndPoint(ipAddr, 12345);
 
             // Creation TCP/IP Socket using  
